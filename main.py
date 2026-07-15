@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import ui, ButtonStyle
 import asyncio
-import os # لإدارة التوكن بأمان
+import os
 
 # إعدادات البوت
 intents = discord.Intents.default()
@@ -35,6 +35,7 @@ class TicketView(ui.View):
 
     @ui.button(label="فتح تيكيت 🎫", style=ButtonStyle.green, custom_id="open_ticket_btn")
     async def create_ticket(self, interaction: discord.Interaction, button: ui.Button):
+        # الحل الجذري: تأجيل الاستجابة فوراً
         await interaction.response.defer(ephemeral=True)
         
         guild = interaction.guild
@@ -48,6 +49,8 @@ class TicketView(ui.View):
         }
         
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites)
+        
+        # استخدام followup لإرسال الرد بعد إنشاء القناة
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح في: {channel.mention}", ephemeral=True)
         
         welcome_embed = discord.Embed(
@@ -58,21 +61,57 @@ class TicketView(ui.View):
         await channel.send(embed=welcome_embed, view=TicketActionsView())
         
         detailed_welcome = f"""# 👋 مرحبًا {member.mention}
-شكرًا لتواصلك معنا عبر التذكرة **`{channel_name}`**.
+
+شكرًا لتواصلك معنا عبر التذكرة **`{channel_name}`** في قسم **`ticket`**.
+
+## 📌 ملاحظات مهمة
+
+* يرجى **عدم عمل منشن** لفريق الدعم أو الاستاف داخل التذكرة.
+* يتم مراجعة جميع التذاكر والرد عليها حسب **الترتيب والأولوية**.
+* قد يؤدي تكرار المنشن إلى اتخاذ إجراءات تحد من إمكانية استخدام نظام التذاكر.
+
+## 🛠️ نطاق الدعم الفني
+
+يدعم فريقنا فقط المشاكل المتعلقة بـ:
+
+* 🌐 الاستضافة
+* 🖥️ المواقع الإلكترونية
+* 🤖 خدمات الديسكورد
+
+**ولا يشمل الدعم:**
+
+* الملفات الخاصة بك
+* الأكواد البرمجية
+* الإضافات والسكربتات
+* التعديلات أو الإعدادات التي قمت بها بنفسك
+
+## ⏳ يرجى التحلي بالصبر
+
 سيقوم أحد أعضاء فريق الدعم الفني بالرد على تذكرتك في أقرب وقت ممكن.
-شكرًا لتفهمك، **adhm0127** ❤️"""
+
+شكرًا لتفهمك وتعاونك، **adhm0127** ❤️"""
         
         await channel.send(detailed_welcome)
 
+# أمر إعداد النظام بالتصميم الجديد والصورة الجديدة
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_ticket(ctx):
     embed = discord.Embed(
         title="⚔️ Flaron Mc | نظام التذاكر",
-        description="يرجى الضغط على الزر أدناه لفتح تذكرة جديدة.",
+        description="""مرحباً بك في نظام التذاكر الخاص بـ **Flaron Mc**!
+يرجى الضغط على الزر أدناه لفتح تذكرة جديدة.
+
+⚠️ **ملاحظة هامة:**
+• يرجى التحلي بالصبر وعدم عمل منشن (Ping) للإدارة.
+• سيتم إغلاق التذكرة بعد حل المشكلة.
+
+شكراً لتعاونك معنا! 🤝""",
         color=discord.Color.dark_gray()
     )
+    # رابط الصورة المحدث
     embed.set_image(url="https://cdn.discordapp.com/attachments/1522296835706847365/1527005566038310962/Picsart_26-07-15_20-33-44-745.jpg")
+    
     await ctx.send(embed=embed, view=TicketView())
 
 @bot.event
@@ -81,5 +120,5 @@ async def on_ready():
     bot.add_view(TicketActionsView())
     print(f'البوت {bot.user} متصل الآن!')
 
-# تشغيل البوت باستخدام المتغير البيئي
+# تشغيل البوت باستخدام المتغير المخزن في الاستضافة
 bot.run(os.environ['TOKEN'])

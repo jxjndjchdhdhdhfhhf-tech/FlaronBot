@@ -9,6 +9,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# قائمة الرتب المشتركة (تستخدم في كلاسات الأزرار)
+STAFF_ROLE_IDS = [
+    1526916912175648810, 1521502153129197609, 1526922584258510959, 
+    1526927634951442502, 1527199174615896064, 1526929542512640181,
+    1526932395406921875, 1526931929180536843, 1526932471583739936
+]
+
 # كلاس الأزرار (Close, Claim, Hold)
 class TicketActionsView(ui.View):
     def __init__(self):
@@ -22,7 +29,12 @@ class TicketActionsView(ui.View):
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_message(f"تم استلام التذكرة بواسطة {interaction.user.mention}")
+        # التحقق من أن المستخدم لديه إحدى رتب الاستاف
+        user_role_ids = [role.id for role in interaction.user.roles]
+        if any(role_id in STAFF_ROLE_IDS for role_id in user_role_ids):
+            await interaction.response.send_message(f"تم استلام التذكرة بواسطة {interaction.user.mention}")
+        else:
+            await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
 
     @ui.button(label="Hold", style=ButtonStyle.secondary, custom_id="hold_btn")
     async def hold(self, interaction: discord.Interaction, button: ui.Button):
@@ -41,19 +53,6 @@ class TicketView(ui.View):
         member = interaction.user
         channel_name = f"ticket-{member.name.lower()}"
         
-        # قائمة شاملة لجميع IDs الرتب التي أرسلتها
-        staff_role_ids = [
-            1526916912175648810, 
-            1521502153129197609, 
-            1526922584258510959, 
-            1526927634951442502,
-            1527199174615896064,
-            1526929542512640181,
-            1526932395406921875,
-            1526931929180536843,
-            1526932471583739936
-        ]
-        
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -61,7 +60,7 @@ class TicketView(ui.View):
         }
         
         # إضافة كل الرتب للصلاحيات تلقائياً
-        for role_id in staff_role_ids:
+        for role_id in STAFF_ROLE_IDS:
             role = guild.get_role(role_id)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -110,7 +109,6 @@ class TicketView(ui.View):
         
         await channel.send(detailed_welcome)
 
-# أمر إعداد النظام بالتصميم الجديد والصورة الجديدة
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_ticket(ctx):
@@ -136,5 +134,4 @@ async def on_ready():
     bot.add_view(TicketActionsView())
     print(f'البوت {bot.user} متصل الآن!')
 
-# تشغيل البوت باستخدام المتغير المخزن في الاستضافة
 bot.run(os.environ['TOKEN'])

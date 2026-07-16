@@ -9,7 +9,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# قائمة الرتب المشتركة (تستخدم في كلاسات الأزرار)
+# قائمة الرتب المشتركة (تستخدم في كلاسات الأزرار والإنشاء)
 STAFF_ROLE_IDS = [
     1526916912175648810, 1521502153129197609, 1526922584258510959, 
     1526927634951442502, 1527199174615896064, 1526929542512640181,
@@ -130,8 +130,14 @@ async def setup_ticket(ctx):
 
 @bot.event
 async def on_ready():
+    # إضافة الأزرار للذاكرة حتى تعمل بعد إعادة التشغيل
     bot.add_view(TicketView())
     bot.add_view(TicketActionsView())
+    
+    # تعيين الحالة (Activity)
+    activity = discord.Game(name="Tickets 🎫")
+    await bot.change_presence(activity=activity)
+    
     print(f'البوت {bot.user} متصل الآن!')
 
 bot.run(os.environ['TOKEN'])

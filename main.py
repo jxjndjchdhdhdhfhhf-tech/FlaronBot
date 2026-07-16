@@ -84,7 +84,11 @@ class TicketActionsView(ui.View):
         # التحقق من أن المستخدم لديه إحدى رتب الاستاف
         user_role_ids = [role.id for role in interaction.user.roles]
         if any(role_id in STAFF_ROLE_IDS for role_id in user_role_ids):
-            await interaction.response.send_message(f"تم استلام التذكرة بواسطة {interaction.user.mention}")
+            # --- تعديل: تحديث اسم القناة وتعطيل الزر ---
+            await interaction.channel.edit(name=f"claimed-{interaction.user.name.lower()[:10]}")
+            button.disabled = True
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention}")
         else:
             await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
 
@@ -120,6 +124,10 @@ class TicketView(ui.View):
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites)
         
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح في: {channel.mention}", ephemeral=True)
+        
+        # --- تعديل: تنبيه الموظفين عند فتح التذكرة ---
+        staff_mentions = " ".join([f"<@&{rid}>" for rid in STAFF_ROLE_IDS if guild.get_role(rid)])
+        await channel.send(f"🔔 **تذكرة جديدة!** {staff_mentions}\nيرجى من أحد الموظفين استلام التذكرة بالضغط على زر **Claim**.")
         
         welcome_embed = discord.Embed(
             title=f"Welcome to {channel_name}",

@@ -35,12 +35,24 @@ class TicketView(ui.View):
 
     @ui.button(label="فتح تيكيت 🎫", style=ButtonStyle.green, custom_id="open_ticket_btn")
     async def create_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        # الحل الجذري: تأجيل الاستجابة فوراً
         await interaction.response.defer(ephemeral=True)
         
         guild = interaction.guild
         member = interaction.user
         channel_name = f"ticket-{member.name.lower()}"
+        
+        # قائمة شاملة لجميع IDs الرتب التي أرسلتها
+        staff_role_ids = [
+            1526916912175648810, 
+            1521502153129197609, 
+            1526922584258510959, 
+            1526927634951442502,
+            1527199174615896064,
+            1526929542512640181,
+            1526932395406921875,
+            1526931929180536843,
+            1526932471583739936
+        ]
         
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -48,9 +60,14 @@ class TicketView(ui.View):
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
+        # إضافة كل الرتب للصلاحيات تلقائياً
+        for role_id in staff_role_ids:
+            role = guild.get_role(role_id)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites)
         
-        # استخدام followup لإرسال الرد بعد إنشاء القناة
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح في: {channel.mention}", ephemeral=True)
         
         welcome_embed = discord.Embed(
@@ -109,7 +126,6 @@ async def setup_ticket(ctx):
 شكراً لتعاونك معنا! 🤝""",
         color=discord.Color.dark_gray()
     )
-    # رابط الصورة المحدث
     embed.set_image(url="https://cdn.discordapp.com/attachments/1522296835706847365/1527005566038310962/Picsart_26-07-15_20-33-44-745.jpg")
     
     await ctx.send(embed=embed, view=TicketView())

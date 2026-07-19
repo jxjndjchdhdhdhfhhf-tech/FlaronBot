@@ -8,7 +8,7 @@ import sqlite3
 # --- الإعدادات ---
 REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
 
-# --- دالة إضافة النقاط (النقاط محفوظة في ملف staff_points.db ولن تختفي) ---
+# --- دالة إضافة النقاط ---
 def add_staff_points(user_id, amount=5):
     conn = sqlite3.connect('staff_points.db')
     cursor = conn.cursor()
@@ -72,7 +72,7 @@ class RatingView(ui.View):
     @ui.button(label="⭐⭐⭐⭐⭐", style=ButtonStyle.secondary, custom_id="rate_5")
     async def rate_5(self, interaction: discord.Interaction, button: ui.Button): await self.send_thanks(interaction, 5)
 
-# كلاس الأزرار (تعديل: تم حذف أمر حذف القناة)
+# كلاس الأزرار (Close, Claim, Hold)
 class TicketActionsView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -84,16 +84,22 @@ class TicketActionsView(ui.View):
         report_channel = interaction.guild.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
             embed = discord.Embed(title="🎟️ تقرير إغلاق تذكرة", color=discord.Color.red())
+            # إضافة صورة الموظف
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            
+            # الترتيب ليطابق الصورة تماماً
             embed.add_field(name="الموظف:", value=interaction.user.mention, inline=False)
             embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=False)
+            
+            # الرصيد والنقاط يظهران بجانب بعضهما عند ضبط inline=True
             embed.add_field(name="الرصيد الإجمالي:", value=str(new_score), inline=True)
             embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
+            
             await report_channel.send(embed=embed)
         
         embed = discord.Embed(
             title="Thank you for your feedback!",
-            description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n**Your Rating**\nPlease rate your experience below:",
+            description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n[Click here to view the transcript](https://example.com)\n\n**Your Rating**\nPlease rate your experience below:",
             color=discord.Color.green()
         )
         
@@ -102,8 +108,9 @@ class TicketActionsView(ui.View):
         except discord.Forbidden:
             await interaction.channel.send("⚠️ لم أتمكن من إرسال رسالة التقييم إلى الخاص.")
 
-        # تم حذف أمر حذف القناة هنا
-        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط للموظف بنجاح.")
+        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط. سيتم حذف القناة خلال 5 ثوانٍ...")
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):

@@ -8,17 +8,12 @@ import sqlite3
 # --- الإعدادات ---
 REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
 
-# --- دالة التعامل مع النقاط ---
-def get_or_create_points(user_id):
+# --- دالة إضافة النقاط ---
+def add_staff_points(user_id, amount=5):
     conn = sqlite3.connect('staff_points.db')
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0)')
     cursor.execute('INSERT OR IGNORE INTO points (user_id, score) VALUES (?, 0)', (user_id,))
-    conn.commit()
-    return conn, cursor
-
-def add_staff_points(user_id, amount=5):
-    conn, cursor = get_or_create_points(user_id)
     cursor.execute('UPDATE points SET score = score + ? WHERE user_id = ?', (amount, user_id))
     cursor.execute('SELECT score FROM points WHERE user_id = ?', (user_id,))
     new_score = cursor.fetchone()[0]
@@ -43,11 +38,14 @@ STAFF_ROLE_IDS = [
 
 @bot.command()
 async def points(ctx, member: discord.Member = None):
-    """عرض رصيد النقاط لعضو معين أو لنفسك"""
+    """عرض رصيد النقاط"""
     target = member or ctx.author
-    conn, cursor = get_or_create_points(target.id)
+    conn = sqlite3.connect('staff_points.db')
+    cursor = conn.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0)')
     cursor.execute('SELECT score FROM points WHERE user_id = ?', (target.id,))
-    score = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    score = result[0] if result else 0
     conn.close()
     await ctx.send(f"📊 الموظف {target.mention} لديه حالياً **{score}** نقطة.")
 
@@ -88,7 +86,7 @@ class RatingView(ui.View):
     @ui.button(label="⭐⭐⭐⭐⭐", style=ButtonStyle.secondary, custom_id="rate_5")
     async def rate_5(self, interaction: discord.Interaction, button: ui.Button): await self.send_thanks(interaction, 5)
 
-# كلاس الأزرار (تعديل: حذفنا أمر حذف القناة)
+# كلاس الأزرار (Close, Claim, Hold)
 class TicketActionsView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -109,16 +107,18 @@ class TicketActionsView(ui.View):
         
         embed = discord.Embed(
             title="Thank you for your feedback!",
-            description=f"تم إغلاق التذكرة `{interaction.channel.name}`.\nشكراً لتقييم تجربتك!",
+            description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n[Click here to view the transcript](https://example.com)\n\n**Your Rating**\nPlease rate your experience below:",
             color=discord.Color.green()
         )
+        
         try:
             await interaction.user.send(embed=embed, view=RatingView())
         except discord.Forbidden:
             await interaction.channel.send("⚠️ لم أتمكن من إرسال رسالة التقييم إلى الخاص.")
 
-        # تم حذف أمر حذف القناة هنا
-        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط للموظف بنجاح.")
+        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط. سيتم حذف القناة خلال 5 ثوانٍ...")
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
@@ -129,7 +129,7 @@ class TicketActionsView(ui.View):
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention}")
         else:
-            await interaction.response.send_message("عذراً، لا تملك الصلاحية!", ephemeral=True)
+            await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
 
     @ui.button(label="Hold", style=ButtonStyle.secondary, custom_id="hold_btn")
     async def hold(self, interaction: discord.Interaction, button: ui.Button):

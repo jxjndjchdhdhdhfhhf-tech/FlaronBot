@@ -6,7 +6,7 @@ import os
 import sqlite3
 
 # --- الإعدادات ---
-REPORT_CHANNEL_ID = 1528369536322240623 # ضع ID قناة التقارير هنا
+REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
 
 # --- دالة إضافة النقاط ---
 def add_staff_points(user_id, amount=5):
@@ -79,16 +79,17 @@ class TicketActionsView(ui.View):
 
     @ui.button(label="Close", style=ButtonStyle.danger, custom_id="close_btn")
     async def close(self, interaction: discord.Interaction, button: ui.Button):
-        # إضافة النقاط عند الإغلاق
         new_score = add_staff_points(interaction.user.id, 5)
         
-        # إرسال تقرير للقناة المحددة
+        # إرسال التقرير بتنسيق الصورة
         report_channel = interaction.guild.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
-            embed = discord.Embed(title="🎟️ Ticket Report", color=discord.Color.red())
-            embed.add_field(name="الموظف", value=interaction.user.mention, inline=True)
-            embed.add_field(name="النقاط", value="+5", inline=True)
-            embed.add_field(name="الرصيد الإجمالي", value=str(new_score), inline=True)
+            embed = discord.Embed(title="🎟️ تقرير إغلاق تذكرة", color=discord.Color.red())
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            embed.add_field(name="الموظف:", value=interaction.user.mention, inline=False)
+            embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=False)
+            embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
+            embed.add_field(name="الرصيد الإجمالي:", value=str(new_score), inline=True)
             await report_channel.send(embed=embed)
         
         embed = discord.Embed(
@@ -110,7 +111,6 @@ class TicketActionsView(ui.View):
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
         user_role_ids = [role.id for role in interaction.user.roles]
         if any(role_id in STAFF_ROLE_IDS for role_id in user_role_ids):
-            # تمت إزالة إضافة النقاط من هنا (أصبحت في الإغلاق فقط)
             await interaction.channel.edit(name=f"claimed-{interaction.user.name.lower()[:10]}")
             button.disabled = True
             await interaction.response.edit_message(view=self)
@@ -122,7 +122,7 @@ class TicketActionsView(ui.View):
     async def hold(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_message("التذكرة الآن في وضع الانتظار.")
 
-# كلاس نظام فتح التيكيت
+# كلاس نظام فتح التيكيت (باقي الكود كما هو)
 class TicketView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -153,7 +153,6 @@ class TicketView(ui.View):
         welcome_embed = discord.Embed(title=f"Welcome to {channel_name}", description="The support team will be with you shortly.\n**Category:** ticket", color=discord.Color.green())
         await channel.send(embed=welcome_embed, view=TicketActionsView())
         
-        # الرسالة الأصلية كما هي
         detailed_welcome = f"""# 👋 مرحبًا {member.mention}
 
 شكرًا لتواصلك معنا عبر التذكرة **`{channel_name}`** في قسم **`ticket`**.

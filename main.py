@@ -6,7 +6,7 @@ import os
 import sqlite3
 
 # --- الإعدادات ---
-REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
+REPORT_CHANNEL_ID = 1528369536322240623 # ضع ID قناة التقارير هنا
 
 # --- دالة إضافة النقاط ---
 def add_staff_points(user_id, amount=5):

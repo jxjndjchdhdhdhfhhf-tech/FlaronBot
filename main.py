@@ -3,34 +3,42 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 import asyncio
 import os
+import sqlite3
+
+# --- دالة إضافة النقاط (جديدة) ---
+def add_staff_points(user_id, amount=5):
+    conn = sqlite3.connect('staff_points.db')
+    cursor = conn.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0)')
+    cursor.execute('INSERT OR IGNORE INTO points (user_id, score) VALUES (?, 0)', (user_id,))
+    cursor.execute('UPDATE points SET score = score + ? WHERE user_id = ?', (amount, user_id))
+    conn.commit()
+    conn.close()
 
 # إعدادات البوت
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# قائمة الرتب المشتركة (تستخدم في كلاسات الأزرار والإنشاء)
+# قائمة الرتب المشتركة
 STAFF_ROLE_IDS = [
     1521502153129197609, 1526922584258510959, 
     1526927634951442502, 1527199174615896064, 1526929542512640181,
     1526932395406921875, 1526931929180536843, 1526932471583739936
 ]
 
-# كلاس أزرار التقييم بالنجوم (تظهر في الخاص)
+# كلاس أزرار التقييم بالنجوم
 class RatingView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     async def send_thanks(self, interaction, rating):
-        # تعديل الزر الذي تم الضغط عليه ليظهر بنمط أخضر (نجاح) ويتم تعطيل جميع الأزرار بعد التقييم
         for child in self.children:
             child.disabled = True
             if child.custom_id == f"rate_{rating}":
                 child.style = ButtonStyle.success
         
-        # تحديث الرسالة لتعطيل الأزرار
         await interaction.response.edit_message(view=self)
-        # إرسال رسالة شكر مخفية للعضو
         await interaction.followup.send(f"شكراً لتقييمك: {rating} نجوم! ⭐", ephemeral=True)
 
     @ui.button(label="⭐", style=ButtonStyle.secondary, custom_id="rate_1")
@@ -60,7 +68,9 @@ class TicketActionsView(ui.View):
 
     @ui.button(label="Close", style=ButtonStyle.danger, custom_id="close_btn")
     async def close(self, interaction: discord.Interaction, button: ui.Button):
-        # إعداد رسالة التقييم والـ Embed لإرسالها في الخاص
+        # إضافة 5 نقاط عند الإغلاق
+        add_staff_points(interaction.user.id, 5)
+        
         embed = discord.Embed(
             title="Thank you for your feedback!",
             description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n[Click here to view the transcript](https://example.com)\n\n**Your Rating**\nPlease rate your experience below:",
@@ -68,14 +78,11 @@ class TicketActionsView(ui.View):
         )
         
         try:
-            # محاولة إرسال رسالة التقييم إلى خاص العضو (الذي فتح التذكرة أو الذي يتفاعل مع الزر)
-            # هنا نرسلها للشخص الذي قام بالضغط على زر إغلاق التذكرة لتقييم التجربة
             await interaction.user.send(embed=embed, view=RatingView())
         except discord.Forbidden:
-            # إذا كانت رسائل الخاص مغلقة لدى العضو
             await interaction.channel.send("⚠️ لم أتمكن من إرسال رسالة التقييم إلى الخاص لأن إعدادات الرسائل الخاصة لديك مغلقة.")
 
-        await interaction.response.send_message("سيتم حذف القناة خلال 5 ثوانٍ...")
+        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط. سيتم حذف القناة خلال 5 ثوانٍ...")
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
@@ -84,11 +91,13 @@ class TicketActionsView(ui.View):
         # التحقق من أن المستخدم لديه إحدى رتب الاستاف
         user_role_ids = [role.id for role in interaction.user.roles]
         if any(role_id in STAFF_ROLE_IDS for role_id in user_role_ids):
-            # --- تعديل: تحديث اسم القناة وتعطيل الزر ---
+            # إضافة 5 نقاط عند الاستلام
+            add_staff_points(interaction.user.id, 5)
+            
             await interaction.channel.edit(name=f"claimed-{interaction.user.name.lower()[:10]}")
             button.disabled = True
             await interaction.response.edit_message(view=self)
-            await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention}")
+            await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention} (+5 نقاط)")
         else:
             await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
 
@@ -115,7 +124,6 @@ class TicketView(ui.View):
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
-        # إضافة كل الرتب للصلاحيات تلقائياً
         for role_id in STAFF_ROLE_IDS:
             role = guild.get_role(role_id)
             if role:
@@ -125,7 +133,6 @@ class TicketView(ui.View):
         
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح في: {channel.mention}", ephemeral=True)
         
-        # --- تعديل: تنبيه الموظفين عند فتح التذكرة ---
         staff_mentions = " ".join([f"<@&{rid}>" for rid in STAFF_ROLE_IDS if guild.get_role(rid)])
         await channel.send(f"🔔 **تذكرة جديدة!** {staff_mentions}\nيرجى من أحد الموظفين استلام التذكرة بالضغط على زر **Claim**.")
         
@@ -190,12 +197,10 @@ async def setup_ticket(ctx):
 
 @bot.event
 async def on_ready():
-    # إضافة الأزرار للذاكرة حتى تعمل بعد إعادة التشغيل
     bot.add_view(TicketView())
     bot.add_view(TicketActionsView())
-    bot.add_view(RatingView()) # تسجيل كلاس التقييم ليعمل دائماً بعد إعادة التشغيل
+    bot.add_view(RatingView())
     
-    # تعيين الحالة (Activity)
     activity = discord.Game(name="Tickets 🎫")
     await bot.change_presence(activity=activity)
     

@@ -6,7 +6,7 @@ import os
 import sqlite3
 
 # --- الإعدادات ---
-REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
+REPORT_CHANNEL_ID = 1528369536322240623 # ضع ID قناة التقارير هنا
 
 # --- دالة إضافة النقاط ---
 def add_staff_points(user_id, amount=5):
@@ -81,15 +81,20 @@ class TicketActionsView(ui.View):
     async def close(self, interaction: discord.Interaction, button: ui.Button):
         new_score = add_staff_points(interaction.user.id, 5)
         
-        # إرسال التقرير بتنسيق الصورة
         report_channel = interaction.guild.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
             embed = discord.Embed(title="🎟️ تقرير إغلاق تذكرة", color=discord.Color.red())
+            # إضافة صورة الموظف
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            
+            # الترتيب ليطابق الصورة تماماً
             embed.add_field(name="الموظف:", value=interaction.user.mention, inline=False)
             embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=False)
-            embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
+            
+            # الرصيد والنقاط يظهران بجانب بعضهما عند ضبط inline=True
             embed.add_field(name="الرصيد الإجمالي:", value=str(new_score), inline=True)
+            embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
+            
             await report_channel.send(embed=embed)
         
         embed = discord.Embed(
@@ -122,7 +127,6 @@ class TicketActionsView(ui.View):
     async def hold(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_message("التذكرة الآن في وضع الانتظار.")
 
-# كلاس نظام فتح التيكيت (باقي الكود كما هو)
 class TicketView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)

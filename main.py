@@ -8,12 +8,17 @@ import sqlite3
 # --- الإعدادات ---
 REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
 
-# --- دالة إضافة النقاط ---
-def add_staff_points(user_id, amount=5):
+# --- دالة التعامل مع النقاط ---
+def get_or_create_points(user_id):
     conn = sqlite3.connect('staff_points.db')
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0)')
     cursor.execute('INSERT OR IGNORE INTO points (user_id, score) VALUES (?, 0)', (user_id,))
+    conn.commit()
+    return conn, cursor
+
+def add_staff_points(user_id, amount=5):
+    conn, cursor = get_or_create_points(user_id)
     cursor.execute('UPDATE points SET score = score + ? WHERE user_id = ?', (amount, user_id))
     cursor.execute('SELECT score FROM points WHERE user_id = ?', (user_id,))
     new_score = cursor.fetchone()[0]
@@ -35,6 +40,17 @@ STAFF_ROLE_IDS = [
 ]
 
 # --- أوامر الإدارة للنقاط ---
+
+@bot.command()
+async def points(ctx, member: discord.Member = None):
+    """عرض رصيد النقاط لعضو معين أو لنفسك"""
+    target = member or ctx.author
+    conn, cursor = get_or_create_points(target.id)
+    cursor.execute('SELECT score FROM points WHERE user_id = ?', (target.id,))
+    score = cursor.fetchone()[0]
+    conn.close()
+    await ctx.send(f"📊 الموظف {target.mention} لديه حالياً **{score}** نقطة.")
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def add_points(ctx, member: discord.Member, amount: int):
@@ -72,7 +88,7 @@ class RatingView(ui.View):
     @ui.button(label="⭐⭐⭐⭐⭐", style=ButtonStyle.secondary, custom_id="rate_5")
     async def rate_5(self, interaction: discord.Interaction, button: ui.Button): await self.send_thanks(interaction, 5)
 
-# كلاس الأزرار (Close, Claim, Hold)
+# كلاس الأزرار (تعديل: حذفنا أمر حذف القناة)
 class TicketActionsView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -84,33 +100,25 @@ class TicketActionsView(ui.View):
         report_channel = interaction.guild.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
             embed = discord.Embed(title="🎟️ تقرير إغلاق تذكرة", color=discord.Color.red())
-            # إضافة صورة الموظف
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
-            
-            # الترتيب ليطابق الصورة تماماً
             embed.add_field(name="الموظف:", value=interaction.user.mention, inline=False)
             embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=False)
-            
-            # الرصيد والنقاط يظهران بجانب بعضهما عند ضبط inline=True
             embed.add_field(name="الرصيد الإجمالي:", value=str(new_score), inline=True)
             embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
-            
             await report_channel.send(embed=embed)
         
         embed = discord.Embed(
             title="Thank you for your feedback!",
-            description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n[Click here to view the transcript](https://example.com)\n\n**Your Rating**\nPlease rate your experience below:",
+            description=f"تم إغلاق التذكرة `{interaction.channel.name}`.\nشكراً لتقييم تجربتك!",
             color=discord.Color.green()
         )
-        
         try:
             await interaction.user.send(embed=embed, view=RatingView())
         except discord.Forbidden:
             await interaction.channel.send("⚠️ لم أتمكن من إرسال رسالة التقييم إلى الخاص.")
 
-        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط. سيتم حذف القناة خلال 5 ثوانٍ...")
-        await asyncio.sleep(5)
-        await interaction.channel.delete()
+        # تم حذف أمر حذف القناة هنا
+        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط للموظف بنجاح.")
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
@@ -121,7 +129,7 @@ class TicketActionsView(ui.View):
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention}")
         else:
-            await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
+            await interaction.response.send_message("عذراً، لا تملك الصلاحية!", ephemeral=True)
 
     @ui.button(label="Hold", style=ButtonStyle.secondary, custom_id="hold_btn")
     async def hold(self, interaction: discord.Interaction, button: ui.Button):

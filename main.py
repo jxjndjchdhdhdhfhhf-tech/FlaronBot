@@ -4,22 +4,39 @@ from discord import ui, ButtonStyle
 import asyncio
 import os
 import sqlite3
+import time
 
 # --- الإعدادات ---
 REPORT_CHANNEL_ID = 0000000000000000000 # ضع ID قناة التقارير هنا
 
-# --- دالة إضافة النقاط ---
-def add_staff_points(user_id, amount=5):
+# --- دالة إضافة النقاط مع نظام الـ 30 دقيقة ---
+def add_staff_points(user_id, amount=5, check_cooldown=False):
     conn = sqlite3.connect('staff_points.db')
     cursor = conn.cursor()
-    cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0)')
-    cursor.execute('INSERT OR IGNORE INTO points (user_id, score) VALUES (?, 0)', (user_id,))
+    cursor.execute('CREATE TABLE IF NOT EXISTS points (user_id INTEGER PRIMARY KEY, score INTEGER DEFAULT 0, last_ticket INTEGER DEFAULT 0)')
+    
+    if check_cooldown:
+        current_time = int(time.time())
+        cursor.execute('SELECT last_ticket FROM points WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        last_ticket_time = row[0] if row else 0
+        
+        # إذا لم تمر 30 دقيقة (1800 ثانية)
+        if current_time - last_ticket_time < 1800:
+            cursor.execute('SELECT score FROM points WHERE user_id = ?', (user_id,))
+            current_score = cursor.fetchone()[0]
+            conn.close()
+            return current_score, False
+        
+        cursor.execute('UPDATE points SET last_ticket = ? WHERE user_id = ?', (current_time, user_id))
+
+    cursor.execute('INSERT OR IGNORE INTO points (user_id, score, last_ticket) VALUES (?, 0, 0)', (user_id,))
     cursor.execute('UPDATE points SET score = score + ? WHERE user_id = ?', (amount, user_id))
     cursor.execute('SELECT score FROM points WHERE user_id = ?', (user_id,))
     new_score = cursor.fetchone()[0]
     conn.commit()
     conn.close()
-    return new_score
+    return new_score, True
 
 # إعدادات البوت
 intents = discord.Intents.default()
@@ -38,16 +55,28 @@ STAFF_ROLE_IDS = [
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def add_points(ctx, member: discord.Member, amount: int):
-    new_score = add_staff_points(member.id, amount)
+    new_score, _ = add_staff_points(member.id, amount, check_cooldown=False)
     await ctx.send(f"✅ تم إضافة {amount} نقطة لـ {member.mention}. الرصيد الحالي: {new_score}")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def remove_points(ctx, member: discord.Member, amount: int):
-    new_score = add_staff_points(member.id, -amount)
+    new_score, _ = add_staff_points(member.id, -amount, check_cooldown=False)
     await ctx.send(f"✅ تم خصم {amount} نقطة من {member.mention}. الرصيد الحالي: {new_score}")
 
-# كلاس أزرار التقييم بالنجوم
+# --- أمر رؤية النقاط ---
+@bot.command()
+async def points(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    conn = sqlite3.connect('staff_points.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT score FROM points WHERE user_id = ?', (target.id,))
+    row = cursor.fetchone()
+    score = row[0] if row else 0
+    conn.close()
+    await ctx.send(f"📊 الموظف {target.mention} لديه **{score}** نقطة.")
+
+# كلاس التقييم
 class RatingView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -57,7 +86,6 @@ class RatingView(ui.View):
             child.disabled = True
             if child.custom_id == f"rate_{rating}":
                 child.style = ButtonStyle.success
-        
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(f"شكراً لتقييمك: {rating} نجوم! ⭐", ephemeral=True)
 
@@ -72,45 +100,27 @@ class RatingView(ui.View):
     @ui.button(label="⭐⭐⭐⭐⭐", style=ButtonStyle.secondary, custom_id="rate_5")
     async def rate_5(self, interaction: discord.Interaction, button: ui.Button): await self.send_thanks(interaction, 5)
 
-# كلاس الأزرار (Close, Claim, Hold)
+# كلاس الأزرار
 class TicketActionsView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @ui.button(label="Close", style=ButtonStyle.danger, custom_id="close_btn")
     async def close(self, interaction: discord.Interaction, button: ui.Button):
-        new_score = add_staff_points(interaction.user.id, 5)
+        new_score, points_added = add_staff_points(interaction.user.id, 5, check_cooldown=True)
         
         report_channel = interaction.guild.get_channel(REPORT_CHANNEL_ID)
         if report_channel:
             embed = discord.Embed(title="🎟️ تقرير إغلاق تذكرة", color=discord.Color.red())
-            # إضافة صورة الموظف
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
-            
-            # الترتيب ليطابق الصورة تماماً
             embed.add_field(name="الموظف:", value=interaction.user.mention, inline=False)
             embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=False)
-            
-            # الرصيد والنقاط يظهران بجانب بعضهما عند ضبط inline=True
+            points_text = "+5" if points_added else "0 (يجب انتظار 30 دقيقة)"
             embed.add_field(name="الرصيد الإجمالي:", value=str(new_score), inline=True)
-            embed.add_field(name="النقاط المكتسبة:", value="+5", inline=True)
-            
+            embed.add_field(name="النقاط المكتسبة:", value=points_text, inline=True)
             await report_channel.send(embed=embed)
         
-        embed = discord.Embed(
-            title="Thank you for your feedback!",
-            description=f"Your ticket `{interaction.channel.name}` has been closed. We'd love to hear your feedback!\n\n[Click here to view the transcript](https://example.com)\n\n**Your Rating**\nPlease rate your experience below:",
-            color=discord.Color.green()
-        )
-        
-        try:
-            await interaction.user.send(embed=embed, view=RatingView())
-        except discord.Forbidden:
-            await interaction.channel.send("⚠️ لم أتمكن من إرسال رسالة التقييم إلى الخاص.")
-
-        await interaction.response.send_message("تم إغلاق التذكرة وإضافة 5 نقاط. سيتم حذف القناة خلال 5 ثوانٍ...")
-        await asyncio.sleep(5)
-        await interaction.channel.delete()
+        await interaction.response.send_message("تم إغلاق التذكرة بنجاح.")
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
@@ -121,7 +131,7 @@ class TicketActionsView(ui.View):
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(f"✅ تم استلام التذكرة بواسطة {interaction.user.mention}")
         else:
-            await interaction.response.send_message("عذراً، لا تملك الصلاحية لاستلام التذاكر!", ephemeral=True)
+            await interaction.response.send_message("عذراً، لا تملك الصلاحية!", ephemeral=True)
 
     @ui.button(label="Hold", style=ButtonStyle.secondary, custom_id="hold_btn")
     async def hold(self, interaction: discord.Interaction, button: ui.Button):
@@ -137,17 +147,10 @@ class TicketView(ui.View):
         guild = interaction.guild
         member = interaction.user
         channel_name = f"ticket-{member.name.lower()}"
-        
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        
+        overwrites = {guild.default_role: discord.PermissionOverwrite(read_messages=False), member: discord.PermissionOverwrite(read_messages=True, send_messages=True), guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)}
         for role_id in STAFF_ROLE_IDS:
             role = guild.get_role(role_id)
             if role: overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites)
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح في: {channel.mention}", ephemeral=True)
         
@@ -187,7 +190,6 @@ class TicketView(ui.View):
 سيقوم أحد أعضاء فريق الدعم الفني بالرد على تذكرتك في أقرب وقت ممكن.
 
 شكرًا لتفهمك وتعاونك، **adhm0127** ❤️"""
-        
         await channel.send(detailed_welcome)
 
 @bot.command()
@@ -213,8 +215,7 @@ async def on_ready():
     bot.add_view(TicketView())
     bot.add_view(TicketActionsView())
     bot.add_view(RatingView())
-    activity = discord.Game(name="Tickets 🎫")
-    await bot.change_presence(activity=activity)
+    await bot.change_presence(activity=discord.Game(name="Tickets 🎫"))
     print(f'البوت {bot.user} متصل الآن!')
 
 bot.run(os.environ['TOKEN'])

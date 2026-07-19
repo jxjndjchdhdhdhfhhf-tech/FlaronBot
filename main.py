@@ -5,7 +5,7 @@ import asyncio
 import os
 import sqlite3
 
-# --- دالة إضافة النقاط (جديدة) ---
+# --- دالة إضافة النقاط ---
 def add_staff_points(user_id, amount=5):
     conn = sqlite3.connect('staff_points.db')
     cursor = conn.cursor()
@@ -20,11 +20,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# قائمة الرتب المشتركة
+# قائمة الرتب المشتركة (محدثة)
 STAFF_ROLE_IDS = [
-    1521502153129197609, 1526922584258510959, 
-    1526927634951442502, 1527199174615896064, 1526929542512640181,
-    1526932395406921875, 1526931929180536843, 1526932471583739936
+    1528345392138424381, 1527841863581696040, 1527843697998168216,
+    1528348685438681218, 1528348998610452531, 1528344992534237204,
+    1528361282984738887, 1528346435395915886, 1528352217848090634,
+    1528352440129290250, 1528352802211102820, 1528346147783970886,
+    1528346190985564241, 1528353600605130803
 ]
 
 # كلاس أزرار التقييم بالنجوم
@@ -68,7 +70,6 @@ class TicketActionsView(ui.View):
 
     @ui.button(label="Close", style=ButtonStyle.danger, custom_id="close_btn")
     async def close(self, interaction: discord.Interaction, button: ui.Button):
-        # إضافة 5 نقاط عند الإغلاق
         add_staff_points(interaction.user.id, 5)
         
         embed = discord.Embed(
@@ -88,10 +89,8 @@ class TicketActionsView(ui.View):
 
     @ui.button(label="Claim", style=ButtonStyle.primary, custom_id="claim_btn")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
-        # التحقق من أن المستخدم لديه إحدى رتب الاستاف
         user_role_ids = [role.id for role in interaction.user.roles]
         if any(role_id in STAFF_ROLE_IDS for role_id in user_role_ids):
-            # إضافة 5 نقاط عند الاستلام
             add_staff_points(interaction.user.id, 5)
             
             await interaction.channel.edit(name=f"claimed-{interaction.user.name.lower()[:10]}")
